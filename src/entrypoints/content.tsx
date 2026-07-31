@@ -3,8 +3,6 @@ import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Rnd } from 'react-rnd';
 import { ConversationList } from '@/components/ConversationList';
-import { TrashList } from '@/components/TrashList';
-import { addToTrash, loadTrash, saveTrash, type TrashEntry } from '@/lib/trash';
 
 export default defineContentScript({
   matches: ['https://chatgpt.com/*'],
@@ -63,9 +61,6 @@ function Toolbar() {
 }
 
 function Panel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<'chats' | 'trash'>('chats');
-  const [trash, setTrash] = useState<TrashEntry[]>(loadTrash);
-
   return (
     <Rnd
       default={{ x: 320, y: 96, width: 520, height: 400 }}
@@ -73,16 +68,19 @@ function Panel({ onClose }: { onClose: () => void }) {
       minHeight={220}
       bounds="window"
       dragHandleClassName="cbde-drag"
-      style={{ zIndex: 2147483000, position: 'fixed' }}
-      className="bg-token-main-surface-primary text-token-text-primary border-token-border-default flex flex-col overflow-hidden rounded-2xl border shadow-lg"
+      // Layout inline rather than via classes: we borrow ChatGPT's stylesheet, so
+      // any utility their build didn't generate (min-h-0, notably) silently no-ops.
+      style={{
+        zIndex: 2147483000,
+        position: 'fixed',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+      className="bg-token-main-surface-primary text-token-text-primary border-token-border-default rounded-2xl border shadow-lg"
     >
-      <div className="cbde-drag border-token-border-default flex cursor-move items-center gap-1 border-b px-3 py-2 text-sm select-none">
-        <Tab active={tab === 'chats'} onClick={() => setTab('chats')}>
-          Conversations
-        </Tab>
-        <Tab active={tab === 'trash'} onClick={() => setTab('trash')}>
-          Trash{trash.length > 0 && ` (${trash.length})`}
-        </Tab>
+      <div className="cbde-drag border-token-border-default flex cursor-move items-center gap-1 border-b px-3 py-2 text-sm font-semibold select-none">
+        <span>Bulk delete &amp; export</span>
         <button
           type="button"
           aria-label="Close"
@@ -92,40 +90,8 @@ function Panel({ onClose }: { onClose: () => void }) {
           ✕
         </button>
       </div>
-      {tab === 'chats' ? (
-        <ConversationList
-          onDeleted={(deleted) =>
-            setTrash((prev) => saveTrash(addToTrash(prev, deleted, new Date().toISOString())))
-          }
-        />
-      ) : (
-        <TrashList entries={trash} onChange={(next) => setTrash(saveTrash(next))} />
-      )}
+      <ConversationList />
     </Rnd>
-  );
-}
-
-function Tab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`cursor-pointer rounded-full px-3 py-0.5 ${
-        active
-          ? 'bg-token-main-surface-secondary font-semibold'
-          : 'text-token-text-tertiary hover:text-token-text-primary'
-      }`}
-    >
-      {children}
-    </button>
   );
 }
 

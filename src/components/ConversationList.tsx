@@ -11,12 +11,7 @@ import {
   type ConversationPatch,
 } from '@/lib/chatgpt';
 
-export interface ConversationListProps {
-  /** Deleted conversations, so the panel can file them in the trash. */
-  onDeleted: (deleted: Conversation[]) => void;
-}
-
-export function ConversationList({ onDeleted }: ConversationListProps) {
+export function ConversationList() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState('');
@@ -45,6 +40,7 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
   }
 
   function onRowToggle(index: number, shiftKey: boolean) {
+    if (busy) return;
     const clicked = visible[index];
     const on = !selected.has(clicked.id);
     const rows =
@@ -59,6 +55,7 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
   }
 
   function toggleAllVisible() {
+    if (busy) return;
     setMany(
       visible.map((c) => c.id),
       !allVisibleSelected,
@@ -89,9 +86,7 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
     if (ids.length === 0) return;
     if (
       'is_visible' in patch &&
-      !confirm(
-        `Delete ${ids.length} conversation${ids.length > 1 ? 's' : ''}? They go to this panel's trash, where a restore can be attempted.`,
-      )
+      !confirm(`Delete ${ids.length} conversation${ids.length > 1 ? 's' : ''}? This cannot be undone.`)
     ) {
       return;
     }
@@ -103,9 +98,6 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
         setStatus(`${label} ${done} / ${total}`),
       );
       const gone = new Set(ok);
-      if ('is_visible' in patch && !patch.is_visible) {
-        onDeleted(items.filter((c) => gone.has(c.id)));
-      }
       setItems((prev) => prev.filter((c) => !gone.has(c.id)));
       setSelected((prev) => new Set([...prev].filter((id) => !gone.has(id))));
       setStatus(
@@ -122,8 +114,9 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
       onKeyDown={(e) => {
+        if (busy) return;
         if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
           e.preventDefault();
           setMany(
@@ -150,6 +143,7 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
             anchor.current = null;
           }}
           placeholder="Search titles"
+          disabled={busy}
           className="border-token-border-default min-w-0 flex-1 rounded-full border bg-transparent px-3 py-1 text-sm outline-none"
         />
         <button
@@ -176,7 +170,7 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
           role="checkbox"
           aria-checked={allVisibleSelected}
           onClick={toggleAllVisible}
-          disabled={visible.length === 0}
+          disabled={busy || visible.length === 0}
           className="flex cursor-pointer items-center gap-2 disabled:opacity-40"
         >
           <Check checked={allVisibleSelected} />
@@ -188,7 +182,18 @@ export function ConversationList({ onDeleted }: ConversationListProps) {
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-1 text-sm">
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          // A running batch mutates items out from under the rows — don't let
+          // clicks land on a list that's about to reshuffle.
+          pointerEvents: busy ? 'none' : undefined,
+          opacity: busy ? 0.5 : undefined,
+        }}
+        className="p-1 text-sm"
+      >
         {visible.map((c, i) => (
           <div
             key={c.id}

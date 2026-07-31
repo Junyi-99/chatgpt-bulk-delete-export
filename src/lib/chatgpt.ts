@@ -71,26 +71,36 @@ export interface BatchResult {
 }
 
 /**
- * One id at a time so a bulk run stays under ChatGPT's rate limit, and one
- * failure never aborts the rest.
- * ponytail: sequential. If it's too slow, run 3-4 at a time before building a real queue.
+ * Runs `concurrency` requests at a time, never all at once: 500 parallel PATCHes
+ * is a good way to collect 500 429s. One failure never aborts the rest.
+ * ponytail: shared-cursor pool. Raise the default if ChatGPT tolerates more.
  */
 export async function patchEach(
   ids: string[],
   patch: ConversationPatch,
   patchOne: Patcher,
   onProgress?: (done: number, total: number) => void,
+  concurrency = 5,
 ): Promise<BatchResult> {
   const result: BatchResult = { ok: [], failed: [] };
-  for (const id of ids) {
-    try {
-      await patchOne(id, patch);
-      result.ok.push(id);
-    } catch (e) {
-      result.failed.push({ id, error: e instanceof Error ? e.message : String(e) });
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < ids.length) {
+      const id = ids[cursor++]; // sync read-and-advance: no two workers get the same id
+      try {
+        await patchOne(id, patch);
+        result.ok.push(id);
+      } catch (e) {
+        result.failed.push({ id, error: e instanceof Error ? e.message : String(e) });
+      }
+      onProgress?.(result.ok.length + result.failed.length, ids.length);
     }
-    onProgress?.(result.ok.length + result.failed.length, ids.length);
-  }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, ids.length) }, worker),
+  );
   return result;
 }
 

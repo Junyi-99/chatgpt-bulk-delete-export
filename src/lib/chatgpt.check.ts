@@ -1,5 +1,4 @@
 // ponytail: self-check for the pagination loop, run with `bun run src/lib/chatgpt.check.ts`
-import { addToTrash, removeFromTrash } from './trash';
 import {
   fetchAllConversations,
   patchEach,
@@ -53,26 +52,44 @@ const flaky: Patcher = async (id) => {
   if (id === 'b') throw new Error('403');
 };
 const batch = await patchEach(['a', 'b', 'c'], { is_visible: false }, flaky);
-ok(seen.join() === 'a,b,c', `every id must be attempted, got ${seen.join()}`);
-ok(batch.ok.join() === 'a,c', `expected a,c to succeed — got ${batch.ok.join()}`);
+ok(seen.toSorted().join() === 'a,b,c', `every id must be attempted, got ${seen.join()}`);
+ok(batch.ok.toSorted().join() === 'a,c', `expected a,c to succeed — got ${batch.ok.join()}`);
 ok(batch.failed.length === 1 && batch.failed[0].error === '403', 'failure not reported');
+
+// The pool must keep exactly `concurrency` requests in flight — no more (rate
+// limits) and no accidental serialization, and every id handled exactly once.
+let inFlight = 0;
+let peak = 0;
+const handled: string[] = [];
+const slow: Patcher = async (id) => {
+  inFlight++;
+  peak = Math.max(peak, inFlight);
+  await new Promise((r) => setTimeout(r, 1));
+  handled.push(id);
+  inFlight--;
+};
+const many = Array.from({ length: 20 }, (_, i) => `id${i}`);
+const pooled = await patchEach(many, { is_archived: true }, slow, undefined, 4);
+ok(peak === 4, `expected 4 in flight, peaked at ${peak}`);
+ok(handled.length === 20, `expected 20 handled, got ${handled.length}`);
+ok(new Set(handled).size === 20, 'an id was handled twice');
+ok(pooled.ok.length === 20 && pooled.failed.length === 0, 'pooled results wrong');
+
+// A pool of one is still sequential and in order.
+const serial: string[] = [];
+await patchEach(['a', 'b', 'c'], { is_archived: true }, async (id) => {
+  serial.push(id);
+}, undefined, 1);
+ok(serial.join() === 'a,b,c', `concurrency 1 must stay ordered, got ${serial.join()}`);
+
+// Fewer ids than workers must not spawn idle workers or hang.
+ok((await patchEach(['solo'], { is_archived: true }, async () => {}, undefined, 8)).ok.length === 1,
+  'short batch broke');
 
 // Shift-range works in both directions and includes both endpoints.
 const rows = ['a', 'b', 'c', 'd'];
 ok(rangeBetween(rows, 1, 3).join() === 'b,c,d', 'forward range wrong');
 ok(rangeBetween(rows, 3, 1).join() === 'b,c,d', 'backward range wrong');
 ok(rangeBetween(rows, 2, 2).join() === 'c', 'single-row range wrong');
-
-// Trash keeps newest-first order and refreshes a re-deleted entry in place
-// instead of stacking duplicates.
-let trash = addToTrash([], [conv('a'), conv('b')], '2026-01-01');
-trash = addToTrash(trash, [conv('c')], '2026-01-02');
-ok(trash.map((e) => e.id).join() === 'c,a,b', `newest first — got ${trash.map((e) => e.id).join()}`);
-
-trash = addToTrash(trash, [conv('a')], '2026-01-03');
-ok(trash.length === 3, `re-delete must not duplicate, got ${trash.length}`);
-ok(trash[0].id === 'a' && trash[0].deleted_at === '2026-01-03', 'entry not refreshed');
-
-ok(removeFromTrash(trash, ['a', 'c']).map((e) => e.id).join() === 'b', 'remove wrong');
 
 console.log('ok');
