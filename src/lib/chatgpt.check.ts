@@ -1,4 +1,5 @@
 // ponytail: self-check for the pagination loop, run with `bun run src/lib/chatgpt.check.ts`
+import { addToTrash, removeFromTrash } from './trash';
 import {
   fetchAllConversations,
   patchEach,
@@ -61,5 +62,17 @@ const rows = ['a', 'b', 'c', 'd'];
 ok(rangeBetween(rows, 1, 3).join() === 'b,c,d', 'forward range wrong');
 ok(rangeBetween(rows, 3, 1).join() === 'b,c,d', 'backward range wrong');
 ok(rangeBetween(rows, 2, 2).join() === 'c', 'single-row range wrong');
+
+// Trash keeps newest-first order and refreshes a re-deleted entry in place
+// instead of stacking duplicates.
+let trash = addToTrash([], [conv('a'), conv('b')], '2026-01-01');
+trash = addToTrash(trash, [conv('c')], '2026-01-02');
+ok(trash.map((e) => e.id).join() === 'c,a,b', `newest first — got ${trash.map((e) => e.id).join()}`);
+
+trash = addToTrash(trash, [conv('a')], '2026-01-03');
+ok(trash.length === 3, `re-delete must not duplicate, got ${trash.length}`);
+ok(trash[0].id === 'a' && trash[0].deleted_at === '2026-01-03', 'entry not refreshed');
+
+ok(removeFromTrash(trash, ['a', 'c']).map((e) => e.id).join() === 'b', 'remove wrong');
 
 console.log('ok');

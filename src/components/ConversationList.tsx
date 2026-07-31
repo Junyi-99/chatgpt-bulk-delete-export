@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
+import { Check } from '@/components/Check';
 import {
   createPageFetcher,
   createPatcher,
@@ -10,7 +11,12 @@ import {
   type ConversationPatch,
 } from '@/lib/chatgpt';
 
-export function ConversationList() {
+export interface ConversationListProps {
+  /** Deleted conversations, so the panel can file them in the trash. */
+  onDeleted: (deleted: Conversation[]) => void;
+}
+
+export function ConversationList({ onDeleted }: ConversationListProps) {
   const [items, setItems] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState('');
@@ -83,7 +89,9 @@ export function ConversationList() {
     if (ids.length === 0) return;
     if (
       'is_visible' in patch &&
-      !confirm(`Delete ${ids.length} conversation${ids.length > 1 ? 's' : ''}? This cannot be undone.`)
+      !confirm(
+        `Delete ${ids.length} conversation${ids.length > 1 ? 's' : ''}? They go to this panel's trash, where a restore can be attempted.`,
+      )
     ) {
       return;
     }
@@ -95,6 +103,9 @@ export function ConversationList() {
         setStatus(`${label} ${done} / ${total}`),
       );
       const gone = new Set(ok);
+      if ('is_visible' in patch && !patch.is_visible) {
+        onDeleted(items.filter((c) => gone.has(c.id)));
+      }
       setItems((prev) => prev.filter((c) => !gone.has(c.id)));
       setSelected((prev) => new Set([...prev].filter((id) => !gone.has(id))));
       setStatus(
@@ -160,15 +171,17 @@ export function ConversationList() {
       </div>
 
       <div className="border-token-border-default text-token-text-tertiary flex items-center gap-2 border-b px-3 py-1 text-xs">
-        <label className="flex cursor-pointer items-center gap-2">
-          <input
-            type="checkbox"
-            checked={allVisibleSelected}
-            onChange={toggleAllVisible}
-            disabled={visible.length === 0}
-          />
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={allVisibleSelected}
+          onClick={toggleAllVisible}
+          disabled={visible.length === 0}
+          className="flex cursor-pointer items-center gap-2 disabled:opacity-40"
+        >
+          <Check checked={allVisibleSelected} />
           All {visible.length !== items.length && `(${visible.length} shown)`}
-        </label>
+        </button>
         <span className="ms-auto">
           {selectedCount > 0 && `${selectedCount} selected · `}
           {status}
@@ -177,20 +190,21 @@ export function ConversationList() {
 
       <div className="min-h-0 flex-1 overflow-auto p-1 text-sm">
         {visible.map((c, i) => (
-          <label
+          <div
             key={c.id}
-            className="hover:bg-token-main-surface-secondary flex cursor-pointer items-baseline gap-2 rounded-lg px-2 py-1"
-          >
-            <input
-              type="checkbox"
-              checked={selected.has(c.id)}
-              // Shift-click only reaches onClick with the modifier intact; onChange loses it.
-              onClick={(e) => {
+            role="checkbox"
+            aria-checked={selected.has(c.id)}
+            tabIndex={0}
+            onClick={(e) => onRowToggle(i, e.shiftKey)}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
                 e.preventDefault();
                 onRowToggle(i, e.shiftKey);
-              }}
-              onChange={() => {}}
-            />
+              }
+            }}
+            className="hover:bg-token-main-surface-secondary flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 select-none"
+          >
+            <Check checked={selected.has(c.id)} />
             <span className="truncate">{c.title || '(untitled)'}</span>
             <a
               href={`/c/${c.id}`}
@@ -201,7 +215,7 @@ export function ConversationList() {
             >
               {c.update_time?.slice(0, 10)} ↗
             </a>
-          </label>
+          </div>
         ))}
       </div>
     </div>
