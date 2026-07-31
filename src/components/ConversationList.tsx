@@ -11,12 +11,72 @@ import {
   type ConversationPatch,
 } from '@/lib/chatgpt';
 
+interface Progress {
+  verb: string;
+  done: number;
+  total: number;
+}
+
+// Inline, like the rest of the layout: gap-*/inline-flex may not exist in the
+// stylesheet we borrow from ChatGPT.
+const actionStyle = (running: boolean) =>
+  ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 6,
+    // The running action is disabled too, but it shouldn't look dimmed out —
+    // it's the one thing on screen the user is watching.
+    opacity: running ? 1 : undefined,
+  }) as const;
+
+/** Swaps to "Deleting 12 / 40" with a filling ring while this action is the one running. */
+function ActionLabel({
+  idle,
+  verb,
+  progress,
+}: {
+  idle: string;
+  verb: string;
+  progress: Progress | null;
+}) {
+  if (progress?.verb !== verb) return <>{idle}</>;
+  return (
+    <>
+      <Ring fraction={progress.total ? progress.done / progress.total : 0} />
+      {verb} {progress.done} / {progress.total}
+    </>
+  );
+}
+
+function Ring({ fraction }: { fraction: number }) {
+  const radius = 6;
+  const circumference = 2 * Math.PI * radius;
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx="8" cy="8" r={radius} fill="none" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+      <circle
+        cx="8"
+        cy="8"
+        r={radius}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - fraction)}
+        style={{ transition: 'stroke-dashoffset 120ms linear' }}
+      />
+    </svg>
+  );
+}
+
 export function ConversationList() {
   const [items, setItems] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<Progress | null>(null);
   const anchor = useRef<number | null>(null);
 
   const visible = useMemo(() => {
@@ -81,7 +141,7 @@ export function ConversationList() {
     }
   }
 
-  async function apply(label: string, patch: ConversationPatch) {
+  async function apply(label: string, verb: string, patch: ConversationPatch) {
     const ids = items.filter((c) => selected.has(c.id)).map((c) => c.id);
     if (ids.length === 0) return;
     if (
@@ -92,10 +152,12 @@ export function ConversationList() {
     }
 
     setBusy(true);
+    setStatus('');
+    setProgress({ verb, done: 0, total: ids.length });
     try {
       const patchOne = createPatcher(await getAccessToken());
       const { ok, failed } = await patchEach(ids, patch, patchOne, (done, total) =>
-        setStatus(`${label} ${done} / ${total}`),
+        setProgress({ verb, done, total }),
       );
       const gone = new Set(ok);
       setItems((prev) => prev.filter((c) => !gone.has(c.id)));
@@ -108,6 +170,7 @@ export function ConversationList() {
     } catch (e) {
       setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      setProgress(null);
       setBusy(false);
     }
   }
@@ -148,19 +211,21 @@ export function ConversationList() {
         />
         <button
           type="button"
-          onClick={() => apply('Archive', { is_archived: true })}
+          onClick={() => apply('Archive', 'Archiving', { is_archived: true })}
           disabled={busy || selectedCount === 0}
+          style={actionStyle(progress?.verb === 'Archiving')}
           className="border-token-border-default cursor-pointer rounded-full border px-3 py-1 text-sm disabled:opacity-40"
         >
-          Archive
+          <ActionLabel idle="Archive" verb="Archiving" progress={progress} />
         </button>
         <button
           type="button"
-          onClick={() => apply('Delete', { is_visible: false })}
+          onClick={() => apply('Delete', 'Deleting', { is_visible: false })}
           disabled={busy || selectedCount === 0}
+          style={actionStyle(progress?.verb === 'Deleting')}
           className="cursor-pointer rounded-full border border-red-500/50 px-3 py-1 text-sm text-red-500 disabled:opacity-40"
         >
-          Delete
+          <ActionLabel idle="Delete" verb="Deleting" progress={progress} />
         </button>
       </div>
 
