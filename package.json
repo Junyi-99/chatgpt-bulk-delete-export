@@ -1,6 +1,6 @@
 {
-  "name": "wxt-react-starter",
-  "description": "manifest.json description",
+  "name": "chatgpt-bulk-delete-export",
+  "description": "Bulk select, archive, and delete ChatGPT conversations",
   "private": true,
   "version": "0.0.0",
   "type": "module",
