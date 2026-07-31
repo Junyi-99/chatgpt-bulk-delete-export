@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="background" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4C9BEF"/>
+      <stop offset="1" stop-color="#175FAE"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <path d="M64 0C92 0 104 1 116 12C127 24 128 36 128 64C128 92 127 104 116 116C104 127 92 128 64 128C36 128 24 127 12 116C1 104 0 92 0 64C0 36 1 24 12 12C24 1 36 0 64 0Z"/>
+    </clipPath>
+    <filter id="glyph-shadow" x="-20%" y="-25%" width="145%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <path d="M64 0C92 0 104 1 116 12C127 24 128 36 128 64C128 92 127 104 116 116C104 127 92 128 64 128C36 128 24 127 12 116C1 104 0 92 0 64C0 36 1 24 12 12C24 1 36 0 64 0Z" fill="url(#background)"/>
+  <path d="M12 12C24 1 36 1 64 1C92 1 104 1 116 12" fill="none" stroke="#FFFFFF" stroke-opacity=".22" stroke-width="1" stroke-linecap="round" clip-path="url(#squircle)"/>
+  <g fill="#FFFFFF" filter="url(#glyph-shadow)">
+    <rect x="31" y="69" width="67" height="12" rx="6"/>
+    <rect x="31" y="89" width="67" height="12" rx="6"/>
+    <rect x="43" y="34" width="66" height="12" rx="6" transform="rotate(-7 76 40)"/>
+  </g>
+</svg>
