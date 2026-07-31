@@ -5,6 +5,8 @@ export default defineConfig({
   srcDir: 'src',
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    // No default_popup: the icon toggles the in-page panel via action.onClicked.
+    action: { default_title: 'ChatGPT bulk delete & export' },
     permissions: ['storage'],
     host_permissions: ['https://chatgpt.com/*'],
   },

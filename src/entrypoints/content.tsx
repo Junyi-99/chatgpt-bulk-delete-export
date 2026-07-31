@@ -1,12 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Rnd } from 'react-rnd';
 import { ConversationList } from '@/components/ConversationList';
+import { TOGGLE_PANEL, TOGGLE_PANEL_EVENT } from '@/lib/messages';
 
 export default defineContentScript({
   matches: ['https://chatgpt.com/*'],
   main(ctx) {
+    // The toolbar icon and the sidebar button drive the same panel. Bridging
+    // through a DOM event keeps the listener alive across sidebar re-mounts.
+    browser.runtime.onMessage.addListener((message) => {
+      if (message === TOGGLE_PANEL) window.dispatchEvent(new Event(TOGGLE_PANEL_EVENT));
+    });
+
     const ui = createIntegratedUi(ctx, {
       position: 'inline',
       // The "Recents" header button group. Anchored off the Organize-chats button
@@ -28,6 +35,13 @@ export default defineContentScript({
 
 function Toolbar() {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const toggle = () => setOpen((v) => !v);
+    window.addEventListener(TOGGLE_PANEL_EVENT, toggle);
+    return () => window.removeEventListener(TOGGLE_PANEL_EVENT, toggle);
+  }, []);
+
   return (
     <>
       <button
