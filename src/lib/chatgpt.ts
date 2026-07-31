@@ -44,6 +44,62 @@ export function createPageFetcher(token: string): PageFetcher {
   };
 }
 
+/** Archive keeps the chat, `is_visible: false` is what the UI calls Delete. */
+export type ConversationPatch = { is_archived: boolean } | { is_visible: boolean };
+export type Patcher = (id: string, patch: ConversationPatch) => Promise<void>;
+
+export function createPatcher(token: string): Patcher {
+  return async (id, patch) => {
+    const res = await fetch(`/backend-api/conversation/${id}`, {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: {
+        accept: '*/*',
+        'content-type': 'application/json',
+        authorization: `Bearer ${token}`,
+        ...(accountId() ? { 'chatgpt-account-id': accountId()! } : {}),
+      },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+  };
+}
+
+export interface BatchResult {
+  ok: string[];
+  failed: { id: string; error: string }[];
+}
+
+/**
+ * One id at a time so a bulk run stays under ChatGPT's rate limit, and one
+ * failure never aborts the rest.
+ * ponytail: sequential. If it's too slow, run 3-4 at a time before building a real queue.
+ */
+export async function patchEach(
+  ids: string[],
+  patch: ConversationPatch,
+  patchOne: Patcher,
+  onProgress?: (done: number, total: number) => void,
+): Promise<BatchResult> {
+  const result: BatchResult = { ok: [], failed: [] };
+  for (const id of ids) {
+    try {
+      await patchOne(id, patch);
+      result.ok.push(id);
+    } catch (e) {
+      result.failed.push({ id, error: e instanceof Error ? e.message : String(e) });
+    }
+    onProgress?.(result.ok.length + result.failed.length, ids.length);
+  }
+  return result;
+}
+
+/** Inclusive slice between two row indices, in either drag direction. */
+export function rangeBetween<T>(rows: T[], anchor: number, index: number): T[] {
+  const [from, to] = anchor <= index ? [anchor, index] : [index, anchor];
+  return rows.slice(from, to + 1);
+}
+
 /** Pages until the server's `total` is reached, deduped by conversation id. */
 export async function fetchAllConversations(
   fetchPage: PageFetcher,

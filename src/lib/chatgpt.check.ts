@@ -1,5 +1,12 @@
 // ponytail: self-check for the pagination loop, run with `bun run src/lib/chatgpt.check.ts`
-import { fetchAllConversations, type Conversation, type PageFetcher } from './chatgpt';
+import {
+  fetchAllConversations,
+  patchEach,
+  rangeBetween,
+  type Conversation,
+  type PageFetcher,
+  type Patcher,
+} from './chatgpt';
 
 const ok = (cond: boolean, msg: string) => {
   if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -37,5 +44,22 @@ const short: PageFetcher = async (offset) => ({
   total: 999,
 });
 ok((await fetchAllConversations(short)).length === 1, 'did not stop on empty page');
+
+// One bad id must not take the rest of the batch down with it.
+const seen: string[] = [];
+const flaky: Patcher = async (id) => {
+  seen.push(id);
+  if (id === 'b') throw new Error('403');
+};
+const batch = await patchEach(['a', 'b', 'c'], { is_visible: false }, flaky);
+ok(seen.join() === 'a,b,c', `every id must be attempted, got ${seen.join()}`);
+ok(batch.ok.join() === 'a,c', `expected a,c to succeed — got ${batch.ok.join()}`);
+ok(batch.failed.length === 1 && batch.failed[0].error === '403', 'failure not reported');
+
+// Shift-range works in both directions and includes both endpoints.
+const rows = ['a', 'b', 'c', 'd'];
+ok(rangeBetween(rows, 1, 3).join() === 'b,c,d', 'forward range wrong');
+ok(rangeBetween(rows, 3, 1).join() === 'b,c,d', 'backward range wrong');
+ok(rangeBetween(rows, 2, 2).join() === 'c', 'single-row range wrong');
 
 console.log('ok');

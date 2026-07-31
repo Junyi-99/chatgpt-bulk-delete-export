@@ -2,12 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Rnd } from 'react-rnd';
-import {
-  createPageFetcher,
-  fetchAllConversations,
-  getAccessToken,
-  type Conversation,
-} from '@/lib/chatgpt';
+import { ConversationList } from '@/components/ConversationList';
 
 export default defineContentScript({
   matches: ['https://chatgpt.com/*'],
@@ -92,55 +87,3 @@ function Panel({ onClose }: { onClose: () => void }) {
   );
 }
 
-function ConversationList() {
-  const [items, setItems] = useState<Conversation[]>([]);
-  const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  async function fetchAll() {
-    setLoading(true);
-    setStatus('Fetching…');
-    try {
-      const fetchPage = createPageFetcher(await getAccessToken());
-      const all = await fetchAllConversations(fetchPage, (loaded, total) =>
-        setStatus(`${loaded} / ${total}`),
-      );
-      setItems(all);
-      setStatus(`${all.length} conversations`);
-    } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <>
-      <div className="border-token-border-default flex items-center gap-3 border-b px-3 py-2">
-        <button
-          type="button"
-          onClick={fetchAll}
-          disabled={loading}
-          className="btn relative btn-primary cursor-pointer rounded-full px-3 py-1 text-sm disabled:opacity-50"
-        >
-          Fetch all conversations
-        </button>
-        <span className="text-token-text-tertiary text-xs">{status}</span>
-      </div>
-      <div className="flex-1 overflow-auto p-1 text-sm">
-        {items.map((c) => (
-          <a
-            key={c.id}
-            href={`/c/${c.id}`}
-            className="hover:bg-token-main-surface-secondary flex items-baseline justify-between gap-3 rounded-lg px-2 py-1"
-          >
-            <span className="truncate">{c.title || '(untitled)'}</span>
-            <span className="text-token-text-tertiary shrink-0 text-xs">
-              {c.update_time?.slice(0, 10)}
-            </span>
-          </a>
-        ))}
-      </div>
-    </>
-  );
-}
