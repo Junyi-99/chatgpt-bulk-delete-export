@@ -76,6 +76,10 @@ function Panel({ onClose }: { onClose: () => void }) {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        // ChatGPT's modals (Radix) park `pointer-events: none` on <body> and
+        // re-enable it only inside the dialog. We portal into body, so without
+        // this every click passes through to whatever is behind us.
+        pointerEvents: 'auto',
       }}
       className="bg-token-main-surface-primary text-token-text-primary border-token-border-default rounded-2xl border shadow-lg"
     >
