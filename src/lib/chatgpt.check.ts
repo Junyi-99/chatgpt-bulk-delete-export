@@ -3,6 +3,8 @@ import {
   fetchAllConversations,
   patchEach,
   rangeBetween,
+  retryAfterMs,
+  retrying,
   type Conversation,
   type PageFetcher,
   type Patcher,
@@ -85,6 +87,62 @@ ok(serial.join() === 'a,b,c', `concurrency 1 must stay ordered, got ${serial.joi
 // Fewer ids than workers must not spawn idle workers or hang.
 ok((await patchEach(['solo'], { is_archived: true }, async () => {}, undefined, 8)).ok.length === 1,
   'short batch broke');
+
+// --- retry policy. baseDelay 0 everywhere: we assert the decisions, not the clock.
+const resp = (status: number, headers: Record<string, string> = {}) => ({
+  ok: status < 400,
+  status,
+  headers: { get: (name: string) => headers[name.toLowerCase()] ?? null },
+});
+const constant = async () => 'tok';
+
+let attempts = 0;
+const limited = await retrying(
+  async () => resp(++attempts < 3 ? 429 : 200),
+  constant,
+  { baseDelay: 0 },
+);
+ok(limited.ok && attempts === 3, `429 must be retried, took ${attempts} attempts`);
+
+// 401 refreshes the token rather than sleeping, and the retry carries the new one.
+const used: string[] = [];
+const unauthorized = await retrying(
+  async (t) => {
+    used.push(t);
+    return resp(t === 'fresh' ? 200 : 401);
+  },
+  async (refresh) => (refresh ? 'fresh' : 'stale'),
+  { baseDelay: 0 },
+);
+ok(unauthorized.ok && used.join() === 'stale,fresh', `401 must refresh, saw ${used.join()}`);
+
+// 403 is final: a permission error answers the same way every time.
+let denied = 0;
+const forbidden = await retrying(
+  async () => {
+    denied++;
+    return resp(403);
+  },
+  constant,
+  { baseDelay: 0 },
+);
+ok(denied === 1 && forbidden.status === 403, `403 must not retry, tried ${denied} times`);
+
+// Retries are bounded, and the last response is what the caller sees.
+let spins = 0;
+const gaveUp = await retrying(
+  async () => {
+    spins++;
+    return resp(429);
+  },
+  constant,
+  { tries: 4, baseDelay: 0 },
+);
+ok(spins === 4 && gaveUp.status === 429, `expected 4 attempts, got ${spins}`);
+
+ok(retryAfterMs(resp(429, { 'retry-after': '2' })) === 2000, 'Retry-After seconds not honored');
+ok(retryAfterMs(resp(429, { 'retry-after': '900' })) === 30_000, 'Retry-After not capped');
+ok(retryAfterMs(resp(429)) === null, 'missing Retry-After must fall back to backoff');
 
 // Shift-range works in both directions and includes both endpoints.
 const rows = ['a', 'b', 'c', 'd'];

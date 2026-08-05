@@ -4,7 +4,6 @@ import {
   createPageFetcher,
   createPatcher,
   fetchAllConversations,
-  getAccessToken,
   patchEach,
   rangeBetween,
   type Conversation,
@@ -75,6 +74,7 @@ export function ConversationList() {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('');
+  const [archived, setArchived] = useState(false);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const anchor = useRef<number | null>(null);
@@ -83,6 +83,10 @@ export function ConversationList() {
     const q = query.trim().toLowerCase();
     return q ? items.filter((c) => (c.title ?? '').toLowerCase().includes(q)) : items;
   }, [items, query]);
+
+  // In the archive, the same button unarchives — nothing else about it changes.
+  const archiveLabel = archived ? 'Unarchive' : 'Archive';
+  const archiveVerb = archived ? 'Unarchiving' : 'Archiving';
 
   const selectedCount = selected.size;
   const allVisibleSelected =
@@ -114,6 +118,17 @@ export function ConversationList() {
     if (!shiftKey) anchor.current = index;
   }
 
+  /** Switching scope refetches: an archive list with Active's buttons is a trap. */
+  function toggleArchived() {
+    if (busy) return;
+    const next = !archived;
+    setArchived(next);
+    setItems([]);
+    setSelected(new Set());
+    anchor.current = null;
+    void fetchAll(next);
+  }
+
   function toggleAllVisible() {
     if (busy) return;
     setMany(
@@ -123,11 +138,13 @@ export function ConversationList() {
     anchor.current = null;
   }
 
-  async function fetchAll() {
+  // `showArchived` is passed rather than read from state: the toggle fetches
+  // immediately, before React has re-rendered with the new value.
+  async function fetchAll(showArchived = archived) {
     setBusy(true);
     setStatus('Fetching…');
     try {
-      const fetchPage = createPageFetcher(await getAccessToken());
+      const fetchPage = createPageFetcher(showArchived);
       const all = await fetchAllConversations(fetchPage, (loaded, total) =>
         setStatus(`${loaded} / ${total}`),
       );
@@ -155,7 +172,7 @@ export function ConversationList() {
     setStatus('');
     setProgress({ verb, done: 0, total: ids.length });
     try {
-      const patchOne = createPatcher(await getAccessToken());
+      const patchOne = createPatcher();
       const { ok, failed } = await patchEach(ids, patch, patchOne, (done, total) =>
         setProgress({ verb, done, total }),
       );
@@ -180,6 +197,8 @@ export function ConversationList() {
       style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
       onKeyDown={(e) => {
         if (busy) return;
+        // ⌘A inside the search box selects the text you just typed, not the list.
+        if (e.target instanceof HTMLInputElement) return;
         if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
           e.preventDefault();
           setMany(
@@ -192,11 +211,23 @@ export function ConversationList() {
       <div className="border-token-border-default flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <button
           type="button"
-          onClick={fetchAll}
+          onClick={() => fetchAll()}
           disabled={busy}
           className="btn btn-primary relative cursor-pointer rounded-full px-3 py-1 text-sm disabled:opacity-50"
         >
           Fetch all
+        </button>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={archived}
+          onClick={toggleArchived}
+          disabled={busy}
+          style={actionStyle(false)}
+          className="border-token-border-default cursor-pointer rounded-full border px-3 py-1 text-sm disabled:opacity-40"
+        >
+          <Check checked={archived} />
+          Archived
         </button>
         <input
           type="search"
@@ -211,12 +242,12 @@ export function ConversationList() {
         />
         <button
           type="button"
-          onClick={() => apply('Archive', 'Archiving', { is_archived: true })}
+          onClick={() => apply(archiveLabel, archiveVerb, { is_archived: !archived })}
           disabled={busy || selectedCount === 0}
-          style={actionStyle(progress?.verb === 'Archiving')}
+          style={actionStyle(progress?.verb === archiveVerb)}
           className="border-token-border-default cursor-pointer rounded-full border px-3 py-1 text-sm disabled:opacity-40"
         >
-          <ActionLabel idle="Archive" verb="Archiving" progress={progress} />
+          <ActionLabel idle={archiveLabel} verb={archiveVerb} progress={progress} />
         </button>
         <button
           type="button"

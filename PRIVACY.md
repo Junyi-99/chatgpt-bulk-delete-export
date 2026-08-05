@@ -1,6 +1,6 @@
 # Privacy Policy — Bulk Chat Manager for ChatGPT
 
-_Last updated: 31 July 2026_
+_Last updated: 4 August 2026_
 
 ## Summary
 
@@ -20,10 +20,11 @@ never requested.
 
 ## Authentication
 
-The access token is read from ChatGPT's `/api/auth/session` endpoint at the
-moment of use and kept in memory only. It is never written to disk, never
-persisted in extension storage, and never sent anywhere other than
-`chatgpt.com`.
+The access token is read from ChatGPT's `/api/auth/session` endpoint when first
+needed and held in the page's memory for as long as the tab is open, so that a
+batch of a thousand conversations doesn't request it a thousand times. It is
+never written to disk, never persisted in extension storage, and never sent
+anywhere other than `chatgpt.com`. Closing or reloading the tab discards it.
 
 ## Data sharing
 

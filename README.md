@@ -19,12 +19,18 @@ Delete works as a single gesture. Selection survives changing the search.
 
 **Search** filters titles as you type.
 
+**Archived** switches the list to the archive and refetches, where the same
+button unarchives instead of archiving. Deleting works there too.
+
 **Archive** and **Delete** apply to the selection. Delete is behind a confirm and
 cannot be undone. Both run five requests at a time and isolate failures — a 403
-or 429 on one conversation doesn't abort the batch. The running button shows a
-filling ring and a live count, the list is inert while it runs, succeeded rows
-disappear, and anything that failed stays selected with the error in the status
-line (`Delete: 38 done, 2 failed (429)`).
+on one conversation doesn't abort the batch. A 429 or 5xx is retried with a
+backoff (honoring `Retry-After`), and a 401 refetches the access token, since a
+batch of a few thousand outlives both the rate-limit window and the token. The
+running button shows a filling ring and a live count, the list is inert while it
+runs, succeeded rows disappear, and anything that failed stays selected with the
+error in the status line (`Delete: 38 done, 2 failed (403)`) — pressing the
+button again retries exactly those.
 
 ## Install
 
@@ -65,19 +71,25 @@ fire, which messages the content script to toggle the panel. A popup-rendered
 panel wouldn't work: an extension-origin page has none of ChatGPT's stylesheet,
 and its cross-site requests wouldn't carry the `SameSite` session cookie.
 
+The panel is mounted on `<body>` and the sidebar button only dispatches a toggle
+event, so the two are independent. Collapsing the sidebar or navigating unmounts
+that subtree; when the panel lived inside it, an open panel died with it — mid
+batch, taking the progress and the final tally with it.
+
 ## Layout
 
 ```
 src/lib/chatgpt.ts          API: auth, pagination, the batch pool
 src/lib/chatgpt.check.ts    self-check — bun run src/lib/chatgpt.check.ts
 src/components/             ConversationList, Check
-src/entrypoints/content.tsx mounts the sidebar button and the panel
+src/entrypoints/content.tsx panel on <body>, sidebar button as a trigger
 src/entrypoints/background.ts  toolbar icon → toggle message
 ```
 
 `chatgpt.check.ts` covers the parts that break quietly: pagination against a
-server whose totals shift mid-crawl, and the worker pool's in-flight ceiling,
-exactly-once handling, and failure isolation. Plain asserts, no test framework.
+server whose totals shift mid-crawl, the worker pool's in-flight ceiling,
+exactly-once handling and failure isolation, and which HTTP statuses are worth a
+retry. Plain asserts, no test framework.
 
 ## Caveats
 
