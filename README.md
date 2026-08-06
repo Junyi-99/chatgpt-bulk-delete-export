@@ -34,6 +34,11 @@ button again retries exactly those.
 
 ## Install
 
+[**Bulk Chat Manager for ChatGPT**](https://chromewebstore.google.com/detail/bulk-chat-manager-for-cha/lgbnjnejlebkcipdgomeildmeikgejhd)
+on the Chrome Web Store.
+
+To run from source:
+
 ```sh
 bun install
 bun run dev
